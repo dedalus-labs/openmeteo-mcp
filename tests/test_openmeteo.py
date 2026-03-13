@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 import openmeteo
-from openmeteo import OpenMeteoResult
+from openmeteo import ApiBaseUrl, Language, OpenMeteoResult, PrecipitationUnit, TemperatureUnit, WindSpeedUnit
 
 
 @pytest.mark.asyncio
@@ -24,7 +24,7 @@ async def test_get_forecast_defaults_timezone_to_auto(monkeypatch: pytest.Monkey
     result = await openmeteo.openmeteo_get_forecast(latitude=52.52, longitude=13.41)
 
     assert result.success is True
-    assert captured["base_url"] == openmeteo.FORECAST_API_BASE_URL
+    assert captured["base_url"] == ApiBaseUrl.FORECAST
     assert captured["path"] == "/forecast"
     assert captured["params"]["timezone"] == "auto"
 
@@ -102,7 +102,53 @@ async def test_get_json_rejects_non_json_success(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(openmeteo.httpx, "AsyncClient", FakeClient)
 
-    result = await openmeteo._get_json(openmeteo.GEOCODING_API_BASE_URL, "/search", {"name": "Berlin"})
+    result = await openmeteo._get_json(ApiBaseUrl.GEOCODING, "/search", {"name": "Berlin"})
 
     assert result.success is False
     assert result.error == "Upstream returned a non-JSON response"
+
+
+@pytest.mark.asyncio
+async def test_forecast_serializes_enum_parameters(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_get_json(base_url: ApiBaseUrl, path: str, params: dict[str, object]) -> OpenMeteoResult:
+        captured["base_url"] = base_url
+        captured["path"] = path
+        captured["params"] = params
+        return OpenMeteoResult(success=True, data={"ok": True})
+
+    monkeypatch.setattr(openmeteo, "_get_json", fake_get_json)
+
+    result = await openmeteo.openmeteo_get_forecast(
+        latitude=52.52,
+        longitude=13.41,
+        temperature_unit=TemperatureUnit.FAHRENHEIT,
+        wind_speed_unit=WindSpeedUnit.MPH,
+        precipitation_unit=PrecipitationUnit.INCH,
+    )
+
+    assert result.success is True
+    assert captured["base_url"] == ApiBaseUrl.FORECAST
+    assert captured["params"]["temperature_unit"] == "fahrenheit"
+    assert captured["params"]["wind_speed_unit"] == "mph"
+    assert captured["params"]["precipitation_unit"] == "inch"
+
+
+@pytest.mark.asyncio
+async def test_search_locations_serializes_language_enum(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_get_json(base_url: ApiBaseUrl, path: str, params: dict[str, object]) -> OpenMeteoResult:
+        captured["base_url"] = base_url
+        captured["path"] = path
+        captured["params"] = params
+        return OpenMeteoResult(success=True, data={"results": []})
+
+    monkeypatch.setattr(openmeteo, "_get_json", fake_get_json)
+
+    result = await openmeteo.openmeteo_search_locations(name="Berlin", language=Language.ENGLISH)
+
+    assert result.success is True
+    assert captured["base_url"] == ApiBaseUrl.GEOCODING
+    assert captured["params"]["language"] == "en"

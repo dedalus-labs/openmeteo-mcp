@@ -10,6 +10,7 @@ instead of modeling a fake credentialed connection.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from enum import Enum
 from typing import Any
 
 from dedalus_mcp import tool
@@ -18,9 +19,43 @@ import httpx
 from pydantic.dataclasses import dataclass
 
 
-FORECAST_API_BASE_URL = "https://api.open-meteo.com/v1"
-GEOCODING_API_BASE_URL = "https://geocoding-api.open-meteo.com/v1"
 DEFAULT_TIMEOUT_SECONDS = 30.0
+
+
+class ApiBaseUrl(str, Enum):
+    """Open-Meteo upstream API base URLs."""
+
+    FORECAST = "https://api.open-meteo.com/v1"
+    GEOCODING = "https://geocoding-api.open-meteo.com/v1"
+
+
+class Language(str, Enum):
+    """Supported language defaults for geocoding."""
+
+    ENGLISH = "en"
+
+
+class TemperatureUnit(str, Enum):
+    """Open-Meteo temperature units."""
+
+    CELSIUS = "celsius"
+    FAHRENHEIT = "fahrenheit"
+
+
+class WindSpeedUnit(str, Enum):
+    """Open-Meteo wind speed units."""
+
+    KMH = "kmh"
+    MS = "ms"
+    MPH = "mph"
+    KN = "kn"
+
+
+class PrecipitationUnit(str, Enum):
+    """Open-Meteo precipitation units."""
+
+    MM = "mm"
+    INCH = "inch"
 
 
 @dataclass(frozen=True)
@@ -32,17 +67,22 @@ class OpenMeteoResult:
     error: str | None = None
 
 
-def _csv(values: Sequence[str] | None) -> str | None:
+def _enum_value(value: str | Enum) -> str:
+    """Return the serialized value for plain strings and string enums."""
+    return value.value if isinstance(value, Enum) else value
+
+
+def _csv(values: Sequence[str | Enum] | None) -> str | None:
     """Join non-empty values into a stable comma-separated list."""
     if not values:
         return None
-    cleaned = [value.strip() for value in values if value.strip()]
+    cleaned = [_enum_value(value).strip() for value in values if _enum_value(value).strip()]
     if not cleaned:
         return None
     return ",".join(dict.fromkeys(cleaned))
 
 
-async def _get_json(base_url: str, path: str, params: dict[str, Any]) -> OpenMeteoResult:
+async def _get_json(base_url: ApiBaseUrl, path: str, params: dict[str, Any]) -> OpenMeteoResult:
     """Execute a GET request and normalize Open-Meteo error payloads."""
     query = {key: value for key, value in params.items() if value is not None}
 
@@ -78,16 +118,16 @@ async def _get_json(base_url: str, path: str, params: dict[str, Any]) -> OpenMet
     annotations=ToolAnnotations(readOnlyHint=True, idempotentHint=True),
 )
 async def openmeteo_search_locations(
-    name: str, count: int = 5, language: str = "en", country_code: str | None = None
+    name: str, count: int = 5, language: str | Language = Language.ENGLISH, country_code: str | None = None
 ) -> OpenMeteoResult:
     """Search places by name or postal code."""
     result = await _get_json(
-        GEOCODING_API_BASE_URL,
+        ApiBaseUrl.GEOCODING,
         "/search",
         {
             "name": name,
             "count": count,
-            "language": language,
+            "language": _enum_value(language),
             "countryCode": country_code.upper() if country_code else None,
         },
     )
@@ -129,14 +169,14 @@ async def openmeteo_get_forecast(
     forecast_days: int | None = None,
     past_days: int | None = None,
     models: list[str] | None = None,
-    temperature_unit: str | None = None,
-    wind_speed_unit: str | None = None,
-    precipitation_unit: str | None = None,
+    temperature_unit: str | TemperatureUnit | None = None,
+    wind_speed_unit: str | WindSpeedUnit | None = None,
+    precipitation_unit: str | PrecipitationUnit | None = None,
 ) -> OpenMeteoResult:
     """Get weather forecast data for coordinates."""
     resolved_timezone = timezone or "auto"
     return await _get_json(
-        FORECAST_API_BASE_URL,
+        ApiBaseUrl.FORECAST,
         "/forecast",
         {
             "latitude": latitude,
@@ -148,9 +188,9 @@ async def openmeteo_get_forecast(
             "forecast_days": forecast_days,
             "past_days": past_days,
             "models": _csv(models),
-            "temperature_unit": temperature_unit,
-            "wind_speed_unit": wind_speed_unit,
-            "precipitation_unit": precipitation_unit,
+            "temperature_unit": _enum_value(temperature_unit) if temperature_unit else None,
+            "wind_speed_unit": _enum_value(wind_speed_unit) if wind_speed_unit else None,
+            "precipitation_unit": _enum_value(precipitation_unit) if precipitation_unit else None,
         },
     )
 
@@ -169,10 +209,10 @@ async def openmeteo_get_forecast_for_location(
     forecast_days: int | None = None,
     past_days: int | None = None,
     models: list[str] | None = None,
-    temperature_unit: str | None = None,
-    wind_speed_unit: str | None = None,
-    precipitation_unit: str | None = None,
-    language: str = "en",
+    temperature_unit: str | TemperatureUnit | None = None,
+    wind_speed_unit: str | WindSpeedUnit | None = None,
+    precipitation_unit: str | PrecipitationUnit | None = None,
+    language: str | Language = Language.ENGLISH,
     country_code: str | None = None,
     allow_ambiguous: bool = False,
 ) -> OpenMeteoResult:

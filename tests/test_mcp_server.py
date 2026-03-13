@@ -9,9 +9,9 @@ import socket
 from dedalus_mcp import MCPClient
 import pytest
 
+import openmeteo
 from openmeteo import openmeteo_tools
 from server import create_server
-from smoke import smoke_tools
 
 
 def _free_port() -> int:
@@ -43,7 +43,7 @@ async def _wait_for_server(url: str, attempts: int = 20, delay: float = 0.1) -> 
 async def test_server_starts_and_exposes_tools() -> None:
     port = _free_port()
     server = create_server()
-    server.collect(*smoke_tools, *openmeteo_tools)
+    server.collect(*openmeteo_tools)
 
     task = asyncio.create_task(server.serve(host="127.0.0.1", port=port, log_level="warning", verbose=False))
     try:
@@ -52,16 +52,53 @@ async def test_server_starts_and_exposes_tools() -> None:
         async with await MCPClient.connect(url) as client:
             tools = await client.list_tools()
             tool_names = {tool.name for tool in tools.tools}
-            assert "smoke_ping" in tool_names
             assert "openmeteo_search_locations" in tool_names
             assert "openmeteo_get_forecast" in tool_names
             assert "openmeteo_get_forecast_for_location" in tool_names
+    finally:
+        await server.shutdown()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
 
-            result = await client.call_tool("smoke_ping", {"message": "weather-ok"})
+
+@pytest.mark.asyncio
+async def test_server_accepts_string_enum_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_get_json(
+        base_url: openmeteo.ApiBaseUrl, path: str, params: dict[str, object]
+    ) -> openmeteo.OpenMeteoResult:
+        assert base_url == openmeteo.ApiBaseUrl.FORECAST
+        assert path == "/forecast"
+        assert params["temperature_unit"] == "fahrenheit"
+        assert params["wind_speed_unit"] == "mph"
+        assert params["precipitation_unit"] == "inch"
+        return openmeteo.OpenMeteoResult(success=True, data={"ok": True, "params": params})
+
+    monkeypatch.setattr(openmeteo, "_get_json", fake_get_json)
+
+    port = _free_port()
+    server = create_server()
+    server.collect(*openmeteo_tools)
+
+    task = asyncio.create_task(server.serve(host="127.0.0.1", port=port, log_level="warning", verbose=False))
+    try:
+        url = f"http://127.0.0.1:{port}/mcp"
+        await _wait_for_server(url)
+        async with await MCPClient.connect(url) as client:
+            result = await client.call_tool(
+                "openmeteo_get_forecast",
+                {
+                    "latitude": 52.52,
+                    "longitude": 13.41,
+                    "temperature_unit": "fahrenheit",
+                    "wind_speed_unit": "mph",
+                    "precipitation_unit": "inch",
+                },
+            )
             assert result.isError is False
             assert result.structuredContent is not None
-            assert result.structuredContent["ok"] is True
-            assert result.structuredContent["message"] == "weather-ok"
+            assert result.structuredContent["success"] is True
+            assert result.structuredContent["data"]["ok"] is True
     finally:
         await server.shutdown()
         task.cancel()

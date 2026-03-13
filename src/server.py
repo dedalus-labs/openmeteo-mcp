@@ -9,7 +9,6 @@ from dedalus_mcp import MCPServer
 from dedalus_mcp.server import TransportSecuritySettings
 
 from openmeteo import openmeteo_tools
-from smoke import smoke_tools
 
 
 def create_server() -> MCPServer:
@@ -26,5 +25,5 @@ def create_server() -> MCPServer:
 async def main() -> None:
     """Start MCP server."""
     server = create_server()
-    server.collect(*smoke_tools, *openmeteo_tools)
+    server.collect(*openmeteo_tools)
     await server.serve(port=8080)
