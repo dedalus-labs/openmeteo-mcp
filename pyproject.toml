@@ -1,0 +1,169 @@
+[build-system]
+requires = ["uv_build>=0.8.22,<0.9.0"]
+build-backend = "uv_build"
+
+[project]
+name = "openmeteo-mcp"
+version = "0.0.1"
+description = "An Open-Meteo MCP server."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Windsor Nguyen", email = "oss@dedaluslabs.ai" }]
+maintainers = [{ name = "Windsor Nguyen", email = "oss@dedaluslabs.ai" }]
+keywords = ["ai", "mcp", "agents", "dedalus", "weather", "open-meteo"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Atmospheric Science",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "dedalus-labs>=0.2.0",
+    "dedalus-mcp>=0.6.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.2.1",
+    "uvloop>=0.22.1; platform_system != 'Windows'",
+]
+
+[project.urls]
+Homepage = "https://github.com/dedalus-labs/openmeteo-mcp"
+Repository = "https://github.com/dedalus-labs/openmeteo-mcp"
+
+[dependency-groups]
+runtime = [
+    "dedalus-labs>=0.2.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.12.5",
+    "uvloop>=0.22.1; platform_system != 'Windows'",
+]
+test = ["anyio>=4.11.0", "pytest>=8.4.2", "pytest-asyncio>=1.2.0"]
+lint = ["ruff>=0.13.3", "ty>=0.0.12"]
+dev = [
+    { include-group = "runtime" },
+    { include-group = "test" },
+    { include-group = "lint" },
+]
+
+[tool.uv]
+preview = true
+package = false
+default-groups = ["runtime"]
+cache-dir = ".cache/uv"
+compile-bytecode = true
+link-mode = "hardlink"
+environments = ["sys_platform == 'linux'", "sys_platform == 'darwin'"]
+resolution = "highest"
+prerelease = "if-necessary"
+
+[tool.uv.sources]
+
+[tool.uv.build-backend]
+source-exclude = [
+    "dist/**",
+    "**/__pycache__/**",
+    "**/build/**",
+    "**/.pytest_cache/**",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+extend-exclude = ["build/", "dist/", ".venv/", "__pycache__/"]
+fix = true
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 88
+skip-magic-trailing-comma = true
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",
+    "F",
+    "I",
+    "UP",
+    "B",
+    "C4",
+    "SIM",
+    "RUF",
+    "N",
+    "ANN",
+    "S",
+    "PERF",
+    "ARG",
+    "PT",
+]
+ignore = [
+    "COM812",
+    "ISC001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["S101"]
+"src/_client.py" = ["T201"]
+"src/client.py" = ["T201"]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+ignore-fully-untyped = true
+
+[tool.ruff.lint.isort]
+force-single-line = false
+force-sort-within-sections = true
+split-on-trailing-comma = false
+lines-after-imports = 2
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["src"]
+
+[tool.ty.rules]
+invalid-assignment = "error"
+invalid-return-type = "error"
+invalid-argument-type = "error"
+missing-argument = "error"
+too-many-positional-arguments = "error"
+unresolved-reference = "error"
+invalid-base = "error"
+conflicting-metaclass = "error"
+subclass-of-final-class = "error"
+undefined-reveal = "warn"
+division-by-zero = "ignore"
+unused-ignore-comment = "ignore"
+
+[tool.ty.environment]
+root = ["src"]
+python-platform = "darwin"
+python-version = "3.10"
+
+[tool.ty.terminal]
+output-format = "concise"
+error-on-warning = false
+
+[tool.ty.src]
+include = ["**/*.py", "**/*.pyi"]
+exclude = [
+    "build/**",
+    "dist/**",
+    ".venv/**",
+    "__pycache__/**",
+    ".pytest_cache/**",
+    "src/_client.py",
+    "tests/**",
+]
+respect-ignore-files = true
